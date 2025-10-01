@@ -1,59 +1,113 @@
-version: '3.8'
+version: '3.9'
 
 services:
   mysql:
     image: mysql:8.0
     container_name: album-video-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: album_video
-      MYSQL_USER: app_user
-      MYSQL_PASSWORD: app_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-album_video}
+      MYSQL_USER: ${MYSQL_USER:-app_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_password}
+      # パフォーマンス設定
+      MYSQL_INIT_CONNECT: 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci'
+      TZ: 'Asia/Tokyo'
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --max_connections=200
+      --innodb_buffer_pool_size=256M
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - album-video-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   api:
     build:
       context: ./api
       dockerfile: ../docker/api/Dockerfile
+      target: development
+      args:
+        NODE_ENV: development
     container_name: album-video-api
+    restart: unless-stopped
     environment:
       - NODE_ENV=development
+      - DATABASE_URL=mysql://${MYSQL_USER:-app_user}:${MYSQL_PASSWORD:-app_password}@mysql:3306/${MYSQL_DATABASE:-album_video}
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_NAME=album_video
-      - DB_USER=app_user
-      - DB_PASSWORD=app_password
+      - DB_NAME=${MYSQL_DATABASE:-album_video}
+      - DB_USER=${MYSQL_USER:-app_user}
+      - DB_PASSWORD=${MYSQL_PASSWORD:-app_password}
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+      - STORAGE_DRIVER=${STORAGE_DRIVER:-local}
+      - TZ=Asia/Tokyo
     ports:
-      - "8000:3000"
+      - "${API_PORT:-3001}:3000"
     volumes:
       - ./api:/app
       - /app/node_modules
+      - api_uploads:/app/uploads
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     networks:
       - album-video-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
 
   web:
     build:
       context: ./web
       dockerfile: ../docker/web/Dockerfile
+      target: development
+      args:
+        NODE_ENV: development
     container_name: album-video-web
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-http://localhost:3001}
+      - NEXT_TELEMETRY_DISABLED=1
+      - TZ=Asia/Tokyo
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     volumes:
       - ./web:/app
       - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
     networks:
       - album-video-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
 
 volumes:
   mysql_data:
+    driver: local
+  api_uploads:
+    driver: local
 
 networks:
   album-video-network:

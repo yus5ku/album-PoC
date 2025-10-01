@@ -1,0 +1,93 @@
+// Prisma Client generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+// MySQL datasource
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  provider   String   // "line" など
+  providerId String   // 外部ID（LINEのsub等）
+  name       String?
+  imageUrl   String?
+
+  albums     Album[]
+  media      Media[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([provider, providerId], name: "user_provider_providerId_uq")
+  @@index([provider, providerId])
+}
+
+model Album {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  isPublic    Boolean  @default(false)
+
+  media       Media[]
+  jobs        SlideshowJob[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerId, createdAt])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+
+  albumId    String
+  album      Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // 保存先
+  storageKey String   // 例: local:<path> / s3:<key>
+  mime       String
+  width      Int?
+  height     Int?
+  durationMs Int?     // 動画の場合
+
+  caption    String?
+  tags       Json     @default([]) // ← MySQLはstring[]非対応。Jsonで配列管理
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([albumId, createdAt])
+  @@index([ownerId, createdAt])
+}
+
+model SlideshowJob {
+  id        String   @id @default(cuid())
+
+  albumId   String
+  album     Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  // 入力パラメタ（JSON文字列ではなく、構造化したければ Json も可）
+  params    String   @db.Text
+
+  // 状態
+  status    String   @default("queued") // queued | processing | done | failed
+  progress  Int      @default(0)
+  resultKey String?  // 出力動画のstorageKey
+  errorMsg  String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([albumId, createdAt])
+  @@index([status, createdAt])
+}
