@@ -2,12 +2,12 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, X, Image as ImageIcon, Video, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import { Album } from "@/types"
-import { albumsApi, mediaApi } from "@/lib/api"
+import { mediaApi } from "@/lib/api"
 import { formatFileSize, isImageFile, isVideoFile } from "@/lib/utils"
 
 interface FileWithPreview extends File {
@@ -18,24 +18,109 @@ interface FileWithPreview extends File {
 
 export default function UploadPage() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
   const [files, setFiles] = useState<FileWithPreview[]>([])
-  const [albums, setAlbums] = useState<Album[]>([])
-  const [selectedAlbumId, setSelectedAlbumId] = useState<string>("")
   const [dragActive, setDragActive] = useState(false)
   const [uploading, setUploading] = useState(false)
 
+  // ファイル状態の変更を監視
   useEffect(() => {
-    if (session) {
-      fetchAlbums()
+    console.log('Files state changed:', files.length)
+    if (files.length > 0) {
+      console.log('Current files:', files.map(f => ({ name: f.name, uploadStatus: f.uploadStatus })))
     }
-  }, [session])
+  }, [files])
 
-  const fetchAlbums = async () => {
+  // 写真選択ページから戻ってきた時の処理
+  useEffect(() => {
+    const fromPicker = searchParams.get('from')
+    console.log('Upload page useEffect triggered, fromPicker:', fromPicker)
+    console.log('Current URL:', window.location.href)
+    console.log('SearchParams:', searchParams.toString())
+    
+    if (fromPicker === 'picker') {
+      console.log('Loading photos from picker...')
+      loadSelectedPhotos()
+      
+      // URLパラメータをクリアして、再度この処理が実行されないようにする
+      const url = new URL(window.location.href)
+      url.searchParams.delete('from')
+      window.history.replaceState({}, '', url.toString())
+      console.log('URL params cleared')
+    } else {
+      console.log('Not from picker, checking if data exists anyway...')
+      // pickerからでなくても、データが存在する場合は読み込みを試す
+      if ((window as any).selectedFiles || (window as any).selectedPhotosData) {
+        console.log('Found existing data, attempting to load...')
+        loadSelectedPhotos()
+      }
+    }
+  }, [searchParams])
+
+  const loadSelectedPhotos = async () => {
     try {
-      const response = await albumsApi.getAll()
-      setAlbums(response.data)
+      // ブラウザ環境でのみ実行
+      if (typeof window === 'undefined') {
+        console.warn('Window object not available')
+        return
+      }
+
+      console.log('Loading photos from sessionStorage...')
+      
+      // sessionStorageからBase64データを取得
+      const savedPhotosData = sessionStorage.getItem('selectedPhotoFiles')
+      const transferTime = sessionStorage.getItem('photoTransferTime')
+      
+      if (!savedPhotosData) {
+        console.warn('No photo data found in sessionStorage')
+        return
+      }
+      
+      try {
+        const photosData = JSON.parse(savedPhotosData)
+        console.log('Found photo data:', photosData.length, 'photos')
+        
+        // Base64データからFileオブジェクトを復元
+        const restoredFiles: FileWithPreview[] = photosData.map((photoData: any) => {
+          // Base64からBlobを作成
+          const base64Data = photoData.base64.split(',')[1]
+          const byteCharacters = atob(base64Data)
+          const byteNumbers = new Array(byteCharacters.length)
+          
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i)
+          }
+          
+          const byteArray = new Uint8Array(byteNumbers)
+          const blob = new Blob([byteArray], { type: photoData.type })
+          
+          // FileオブジェクトとしてFileWithPreviewを作成
+          const file = new File([blob], photoData.name, {
+            type: photoData.type,
+            lastModified: photoData.lastModified
+          }) as FileWithPreview
+          
+          file.preview = photoData.base64
+          file.uploadStatus = 'pending'
+          
+          return file
+        })
+        
+        console.log('Files restored from Base64:', restoredFiles.length)
+        setFiles(restoredFiles)
+        
+        // データをクリア
+        sessionStorage.removeItem('selectedPhotoFiles')
+        sessionStorage.removeItem('photoTransferTime')
+        
+        console.log('Photo loading completed successfully')
+        
+      } catch (parseError) {
+        console.error('Failed to parse photo data:', parseError)
+        alert('写真データの読み込みに失敗しました')
+      }
     } catch (error) {
-      console.error("アルバムの取得に失敗しました:", error)
+      console.error('選択された写真の読み込みに失敗しました:', error)
     }
   }
 
@@ -114,9 +199,6 @@ export default function UploadPage() {
 
         const formData = new FormData()
         formData.append('file', file)
-        if (selectedAlbumId) {
-          formData.append('albumId', selectedAlbumId)
-        }
 
         await mediaApi.upload(formData)
 
@@ -126,6 +208,8 @@ export default function UploadPage() {
           newFiles[i].uploadStatus = 'success'
           return newFiles
         })
+        
+        console.log(`ファイル ${file.name} のアップロードが完了しました`)
       } catch (error) {
         console.error(`ファイル ${file.name} のアップロードに失敗しました:`, error)
         
@@ -144,6 +228,8 @@ export default function UploadPage() {
   const clearSuccessfulUploads = () => {
     setFiles(prev => prev.filter(file => file.uploadStatus !== 'success'))
   }
+
+  const hasSuccessfulUploads = files.some(file => file.uploadStatus === 'success')
 
   if (!session) {
     return (
@@ -169,29 +255,6 @@ export default function UploadPage() {
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
-          {/* Album Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>アルバムを選択</CardTitle>
-              <CardDescription>
-                アップロードしたファイルを追加するアルバムを選択してください（任意）
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <select
-                value={selectedAlbumId}
-                onChange={(e) => setSelectedAlbumId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">アルバムを選択しない</option>
-                {albums.map((album) => (
-                  <option key={album.id} value={album.id}>
-                    {album.title}
-                  </option>
-                ))}
-              </select>
-            </CardContent>
-          </Card>
 
           {/* File Upload Area */}
           <Card>
@@ -220,19 +283,28 @@ export default function UploadPage() {
                 <p className="text-gray-500 mb-4">
                   または
                 </p>
-                <label htmlFor="file-upload">
-                  <Button variant="outline" className="cursor-pointer">
-                    ファイルを選択
-                  </Button>
+                <div className="space-y-2">
                   <input
-                    id="file-upload"
                     type="file"
                     multiple
                     accept="image/*,video/*"
                     onChange={handleFileInput}
                     className="hidden"
+                    id="file-input"
                   />
-                </label>
+                  <label htmlFor="file-input">
+                    <Button variant="outline" className="cursor-pointer" asChild>
+                      <span>ファイルを選択</span>
+                    </Button>
+                  </label>
+                  <div className="text-center">
+                    <Link href="/photo-picker">
+                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800">
+                        📱 写真ライブラリから選択
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
                 <p className="text-sm text-gray-500 mt-4">
                   対応形式: JPG, PNG, GIF, MP4, MOV, AVI
                 </p>
@@ -252,6 +324,17 @@ export default function UploadPage() {
                     </CardDescription>
                   </div>
                   <div className="space-x-2">
+                    {hasSuccessfulUploads && (
+                      <Link href="/">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          写真を見る
+                        </Button>
+                      </Link>
+                    )}
                     <Button
                       onClick={clearSuccessfulUploads}
                       variant="outline"

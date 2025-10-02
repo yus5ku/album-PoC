@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Album Video - 写真とビデオのアルバムアプリ",
-  description: "写真とビデオを整理し、美しいスライドショーを作成できるアルバムアプリケーション",
+  description: "写真とビデオを整理し、スライドショーを作成できるアルバムアプリケーション",
 };
 
 export default function RootLayout({

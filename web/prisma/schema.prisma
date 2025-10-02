@@ -1,31 +1,68 @@
-// Prisma Client generator
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
 
-// MySQL datasource
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id         String   @id @default(cuid())
-  provider   String   // "line" など
-  providerId String   // 外部ID（LINEのsub等）
-  name       String?
-  imageUrl   String?
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
-  albums     Album[]
-  media      Media[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([provider, providerId], name: "user_provider_providerId_uq")
-  @@index([provider, providerId])
+  @@unique([provider, providerAccountId])
 }
 
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  
+  // Custom fields for album app
+  albums        Album[]
+  media         Media[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Custom models for album app
 model Album {
   id          String   @id @default(cuid())
   ownerId     String
@@ -61,21 +98,13 @@ model Media {
   durationMs Int?     // 動画の場合
 
   caption    String?
-  tags       Json     @default([]) // ← MySQLはstring[]非対応。Jsonで配列管理
-  
-  // 画像分析結果
-  category   String?  // 画像カテゴリ (landscape, portrait, food, etc.)
-  confidence Float?   // 分析の信頼度 (0.0-1.0)
-  colors     Json?    @default([]) // 支配的な色の配列
-  analyzed   Boolean  @default(false) // 分析済みフラグ
+  tags       Json?    // ← MySQLはstring[]非対応。Jsonで配列管理
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([albumId, createdAt])
   @@index([ownerId, createdAt])
-  @@index([category, createdAt])
-  @@index([ownerId, category])
 }
 
 model SlideshowJob {

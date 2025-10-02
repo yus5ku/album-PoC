@@ -27,7 +27,7 @@ export interface Media {
   thumbnailUrl?: string
   albumId?: string
   userId: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }

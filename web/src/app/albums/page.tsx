@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Plus, Image as ImageIcon, Calendar, Lock, Globe } from "lucide-react"
 import Link from "next/link"
 import { Album } from "@/types"
-import { albumsApi } from "@/lib/api"
+import { albumApi } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 
 export default function AlbumsPage() {
@@ -23,8 +23,8 @@ export default function AlbumsPage() {
 
   const fetchAlbums = async () => {
     try {
-      const response = await albumsApi.getAll()
-      setAlbums(response.data)
+      const response = await albumApi.list()
+      setAlbums(response)
     } catch (error) {
       console.error("アルバムの取得に失敗しました:", error)
     } finally {

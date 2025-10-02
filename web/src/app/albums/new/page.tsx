@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
-import { albumsApi } from "@/lib/api"
+import { albumApi } from "@/lib/api"
 import { CreateAlbumData } from "@/types"
 
 const albumSchema = z.object({
@@ -30,7 +30,6 @@ export default function NewAlbumPage() {
     register,
     handleSubmit,
     formState: { errors },
-    watch,
   } = useForm<AlbumFormData>({
     resolver: zodResolver(albumSchema),
     defaultValues: {
@@ -51,8 +50,8 @@ export default function NewAlbumPage() {
         isPublic: data.isPublic,
       }
 
-      const response = await albumsApi.create(albumData)
-      router.push(`/albums/${response.data.id}`)
+      const response = await albumApi.create(albumData)
+      router.push(`/albums/${response.id}`)
     } catch (error) {
       console.error("アルバムの作成に失敗しました:", error)
       alert("アルバムの作成に失敗しました。もう一度お試しください。")
