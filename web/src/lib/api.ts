@@ -1,6 +1,7 @@
 import { getSession } from "next-auth/react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
+// 内部API Routesを使用するため、ベースURLは不要
+const API_BASE_URL = '';
 
 // 美しい写真タイトルを生成する関数
 function generatePhotoTitle(filename: string): string {
@@ -43,21 +44,14 @@ function generatePhotoTitle(filename: string): string {
   return cleanName;
 }
 
-// APIクライアントのベース関数
+// APIクライアントのベース関数（内部API Routes用）
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
-  const session = await getSession();
-  
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
-  // 認証が必要な場合はトークンを追加
-  if (session?.accessToken) {
-    headers['Authorization'] = `Bearer ${session.accessToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`/api${endpoint}`, {
     ...options,
     headers,
   });
@@ -67,6 +61,11 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     throw new Error(error.message || `HTTP ${response.status}`);
   }
 
+  // 204 No Contentの場合はnullを返す
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -74,90 +73,29 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 export const mediaApi = {
   // 写真をアップロード
   upload: async (formData: FormData) => {
-    // モック実装：実際のAPIサーバーがない場合のテスト用
-    return new Promise((resolve, reject) => {
-      const file = formData.get('file') as File;
-      
-      if (!file) {
-        reject(new Error('ファイルが選択されていません'));
-        return;
-      }
-
-      console.log('ファイルアップロード開始:', file.name, file.type, file.size);
-
-      // ファイルをBase64に変換
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64Url = reader.result as string;
-        console.log('Base64変換完了:', base64Url.substring(0, 50) + '...');
-        
-        const finalResponse = {
-          id: Date.now(),
-          filename: file.name,
-          size: file.size,
-          type: file.type,
-          url: base64Url, // 最初からBase64 URLを使用
-          uploadedAt: new Date().toISOString(),
-          title: generatePhotoTitle(file.name),
-          date: new Date().toLocaleDateString('ja-JP'),
-          comment: '',
-          originalName: file.name
-        };
-        
-        // localStorageに保存
-        const savedPhotos = localStorage.getItem('uploadedPhotos');
-        const photos = savedPhotos ? JSON.parse(savedPhotos) : [];
-        photos.unshift(finalResponse);
-        localStorage.setItem('uploadedPhotos', JSON.stringify(photos));
-        
-        console.log('写真保存完了:', finalResponse.title);
-        setTimeout(() => resolve(finalResponse), 500); // 短い遅延
-      };
-      
-      reader.onerror = (error) => {
-        console.error('ファイル読み込みエラー:', error);
-        reject(new Error('ファイルの読み込みに失敗しました'));
-      };
-      
-      reader.readAsDataURL(file);
+    const response = await fetch('/api/media/upload', {
+      method: 'POST',
+      body: formData,
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(error.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   },
 
   // 写真を削除
   delete: async (mediaId: string) => {
-    // モック実装：localStorageから削除
-    const savedPhotos = localStorage.getItem('uploadedPhotos');
-    if (savedPhotos) {
-      const photos = JSON.parse(savedPhotos);
-      const updatedPhotos = photos.filter((photo: any) => photo.id !== parseInt(mediaId));
-      localStorage.setItem('uploadedPhotos', JSON.stringify(updatedPhotos));
-    }
+    return apiRequest(`/media/${mediaId}`, {
+      method: 'DELETE',
+    });
   },
 
-  // 写真を更新
-  update: async (mediaId: string, updateData: { title?: string; comment?: string; date?: string }) => {
-    // モック実装：localStorageで更新
-    const savedPhotos = localStorage.getItem('uploadedPhotos');
-    if (savedPhotos) {
-      const photos = JSON.parse(savedPhotos);
-      const photoIndex = photos.findIndex((photo: any) => photo.id === parseInt(mediaId));
-      if (photoIndex !== -1) {
-        photos[photoIndex] = { ...photos[photoIndex], ...updateData };
-        localStorage.setItem('uploadedPhotos', JSON.stringify(photos));
-        return photos[photoIndex];
-      }
-    }
-    throw new Error('写真が見つかりません');
-  },
-
-  // 写真一覧を取得
-  list: async () => {
-    // モック実装：localStorageから保存された写真を取得
-    const savedPhotos = localStorage.getItem('uploadedPhotos');
-    if (savedPhotos) {
-      return JSON.parse(savedPhotos);
-    }
-    return [];
+  // 写真詳細を取得
+  get: async (mediaId: string) => {
+    return apiRequest(`/media/${mediaId}`);
   },
 
   // カテゴリ別写真を取得
@@ -216,30 +154,12 @@ export const albumApi = {
 
   // アルバムを削除
   delete: async (albumId: string) => {
-    const response = await fetch(`${API_BASE_URL}/albums/${albumId}`, {
+    return apiRequest(`/albums/${albumId}`, {
       method: 'DELETE',
-      headers: await getAuthHeaders(),
     });
-
-    if (!response.ok) {
-      throw new Error('削除に失敗しました');
-    }
   },
 };
 
-// 認証ヘッダーを取得
-async function getAuthHeaders() {
-  const session = await getSession();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (session?.accessToken) {
-    headers['Authorization'] = `Bearer ${session.accessToken}`;
-  }
-
-  return headers;
-}
 
 // エラーハンドリング用のユーティリティ
 export function handleApiError(error: unknown) {

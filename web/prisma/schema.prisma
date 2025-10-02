@@ -99,12 +99,20 @@ model Media {
 
   caption    String?
   tags       Json?    // ← MySQLはstring[]非対応。Jsonで配列管理
+  
+  // 画像分析結果
+  category   String?  // 画像カテゴリ (landscape, portrait, food, etc.)
+  confidence Float?   // 分析の信頼度 (0.0-1.0)
+  colors     Json?    // 支配的な色の配列
+  analyzed   Boolean  @default(false) // 分析済みフラグ
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([albumId, createdAt])
   @@index([ownerId, createdAt])
+  @@index([category, createdAt])
+  @@index([ownerId, category])
 }
 
 model SlideshowJob {
