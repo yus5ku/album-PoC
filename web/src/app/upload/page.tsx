@@ -5,10 +5,11 @@ import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, X, Image as ImageIcon, Video, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, X, Image as ImageIcon, Video, CheckCircle, AlertCircle, Plus } from "lucide-react"
 import Link from "next/link"
-import { mediaApi } from "@/lib/api"
+import { mediaApi, albumApi } from "@/lib/api"
 import { formatFileSize, isImageFile, isVideoFile } from "@/lib/utils"
+import { Album } from "@/types"
 
 interface FileWithPreview extends File {
   preview?: string
@@ -22,6 +23,16 @@ export default function UploadPage() {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [albums, setAlbums] = useState<Album[]>([])
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string>("")
+  const [loadingAlbums, setLoadingAlbums] = useState(true)
+
+  // アルバムを読み込み
+  useEffect(() => {
+    if (session) {
+      loadAlbums()
+    }
+  }, [session])
 
   // ファイル状態の変更を監視
   useEffect(() => {
@@ -56,6 +67,31 @@ export default function UploadPage() {
       }
     }
   }, [searchParams])
+
+  const loadAlbums = async () => {
+    try {
+      setLoadingAlbums(true)
+      const albumList = await albumApi.list()
+      
+      if (albumList.length === 0) {
+        // デフォルトアルバムを作成
+        const defaultAlbum = await albumApi.create({
+          title: "マイフォト",
+          description: "写真とビデオのメインアルバム",
+          isPublic: false
+        })
+        setAlbums([defaultAlbum])
+        setSelectedAlbumId(defaultAlbum.id)
+      } else {
+        setAlbums(albumList)
+        setSelectedAlbumId(albumList[0].id) // 最初のアルバムを選択
+      }
+    } catch (error) {
+      console.error("アルバムの読み込みに失敗しました:", error)
+    } finally {
+      setLoadingAlbums(false)
+    }
+  }
 
   const loadSelectedPhotos = async () => {
     try {
@@ -182,6 +218,10 @@ export default function UploadPage() {
 
   const uploadFiles = async () => {
     if (files.length === 0) return
+    if (!selectedAlbumId) {
+      alert('アルバムを選択してください')
+      return
+    }
 
     setUploading(true)
 
@@ -199,6 +239,7 @@ export default function UploadPage() {
 
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('albumId', selectedAlbumId)
 
         await mediaApi.upload(formData)
 
@@ -255,6 +296,45 @@ export default function UploadPage() {
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
+
+          {/* Album Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle>アルバム選択</CardTitle>
+              <CardDescription>
+                アップロードするアルバムを選択してください
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingAlbums ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-gray-600">アルバムを読み込み中...</span>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-4">
+                  <select
+                    value={selectedAlbumId}
+                    onChange={(e) => setSelectedAlbumId(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">アルバムを選択...</option>
+                    {albums.map((album) => (
+                      <option key={album.id} value={album.id}>
+                        {album.title}
+                      </option>
+                    ))}
+                  </select>
+                  <Link href="/albums/new">
+                    <Button variant="outline" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      新規作成
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* File Upload Area */}
           <Card>
@@ -345,7 +425,7 @@ export default function UploadPage() {
                     </Button>
                     <Button
                       onClick={uploadFiles}
-                      disabled={uploading || files.every(f => f.uploadStatus !== 'pending')}
+                      disabled={uploading || files.every(f => f.uploadStatus !== 'pending') || !selectedAlbumId}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       {uploading ? "アップロード中..." : "アップロード開始"}

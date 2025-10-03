@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import { NextRequest } from "next/server";
-import { ApiError } from "./services/album.service";
+import { ApiError } from "./services/album_service";
 
 export async function requireAuth(request?: NextRequest) {
   const session = await getServerSession(authOptions);

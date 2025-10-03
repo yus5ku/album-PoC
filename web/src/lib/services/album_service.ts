@@ -9,7 +9,37 @@ export class ApiError extends Error {
 }
 
 export async function listAlbums(userId: string) {
-  return prisma.album.findMany({ where: { ownerId: userId }, orderBy: { createdAt: "desc" } });
+  const albums = await prisma.album.findMany({ 
+    where: { ownerId: userId }, 
+    orderBy: { createdAt: "desc" },
+    include: {
+      media: {
+        orderBy: { createdAt: "desc" },
+        take: 1, // カバー画像用に最新の1枚を取得
+        select: {
+          id: true,
+          storageKey: true,
+          mime: true
+        }
+      },
+      _count: {
+        select: {
+          media: true
+        }
+      }
+    }
+  });
+
+  // カバー画像URLとメディア数を追加
+  return albums.map(album => ({
+    ...album,
+    mediaCount: album._count.media,
+    coverImageUrl: album.media.length > 0 && album.media[0].mime.startsWith('image/') 
+      ? `/api/media/file/${album.media[0].id}` 
+      : null,
+    media: undefined, // フロントエンドには送らない
+    _count: undefined // フロントエンドには送らない
+  }));
 }
 
 export async function createAlbum(userId: string, input: { title: string; description?: string; isPublic?: boolean }) {

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth, createApiResponse, createErrorResponse } from "@/lib/auth-helpers";
-import * as mediaService from "@/lib/services/media.service";
+import * as mediaService from "@/lib/services/media_service";
 
 export async function GET(request: NextRequest) {
   try {

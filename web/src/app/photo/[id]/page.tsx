@@ -64,14 +64,24 @@ export default function PhotoDetailPage() {
   useEffect(() => {
     const fetchPhoto = async () => {
       try {
-        const photos = await mediaApi.list()
-        const foundPhoto = photos.find((p: PhotoData) => p.id === parseInt(photoId))
-        if (foundPhoto) {
-          setPhoto(foundPhoto)
-          setEditTitle(foundPhoto.title)
-          setEditComment(foundPhoto.comment || '')
+        const photoData = await mediaApi.get(photoId)
+        if (photoData) {
+          // APIレスポンスを PhotoData 形式に変換
+          const photo: PhotoData = {
+            id: parseInt(photoId),
+            url: photoData.url,
+            title: photoData.caption || `写真 ${photoId}`,
+            date: photoData.createdAt ? new Date(photoData.createdAt).toLocaleDateString('ja-JP') : new Date().toLocaleDateString('ja-JP'),
+            comment: photoData.caption || '',
+            originalName: photoData.storageKey,
+            uploadedAt: photoData.createdAt
+          }
+          
+          setPhoto(photo)
+          setEditTitle(photo.title)
+          setEditComment(photo.comment || '')
           // 日付をYYYY-MM-DD形式に変換
-          setEditDate(convertToInputDate(foundPhoto.date))
+          setEditDate(convertToInputDate(photo.date))
         } else {
           console.error('Photo not found')
           router.push('/')
@@ -89,7 +99,7 @@ export default function PhotoDetailPage() {
     }
   }, [photoId, router])
 
-  // 保存処理
+  // 保存処理（現在は更新機能が未実装のため、ローカル状態のみ更新）
   const handleSave = async () => {
     if (!photo) return
 
@@ -98,13 +108,26 @@ export default function PhotoDetailPage() {
       // 日付を日本語形式に変換
       const formattedDate = new Date(editDate).toLocaleDateString('ja-JP')
       
-      const updatedPhoto = await mediaApi.update(photoId, {
+      // TODO: メディア更新APIが実装されたら、ここでAPIを呼び出す
+      // const updatedPhoto = await mediaApi.update(photoId, {
+      //   title: editTitle,
+      //   comment: editComment,
+      //   date: formattedDate
+      // })
+      
+      // 現在はローカル状態のみ更新
+      const updatedPhoto: PhotoData = {
+        ...photo,
         title: editTitle,
         comment: editComment,
         date: formattedDate
-      })
+      }
+      
       setPhoto(updatedPhoto)
       setIsEditing(false)
+      
+      // 一時的な成功メッセージ
+      alert('変更内容はページ内でのみ保存されました。（API未実装）')
     } catch (error) {
       console.error('Failed to update photo:', error)
       alert('保存に失敗しました')

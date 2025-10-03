@@ -58,15 +58,26 @@ export default function Home() {
   // 写真を取得する関数
   const fetchPhotos = async () => {
     try {
-      const response = await mediaApi.list()
+      const response = await mediaApi.getByCategory('landscape')
       console.log('取得した写真データ:', response)
       
-      // 古いURL.createObjectURLのデータをフィルタリング
+      // 有効なURLかチェック（相対URLも含む）
       const validPhotos = response.filter((photo: any) => {
-        const isValidUrl = photo.url && (photo.url.startsWith('data:') || photo.url.startsWith('http'))
+        if (!photo.url) {
+          console.warn('URLが存在しません:', photo.title, photo)
+          return false
+        }
+        
+        const isValidUrl = (
+          photo.url.startsWith('data:') || 
+          photo.url.startsWith('http') || 
+          photo.url.startsWith('/api/')
+        )
+        
         if (!isValidUrl) {
           console.warn('無効なURL:', photo.title, photo.url)
         }
+        
         return isValidUrl
       })
       
@@ -308,14 +319,14 @@ export default function Home() {
                       <img
                         src={photo.url}
                         alt={photo.title}
-                        className="w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="w-full object-contain transition-transform duration-300 group-hover:scale-105"
                         loading="eager"
                         style={{
                           height: 'auto',
                           maxHeight: '350px',
                           minHeight: '120px',
                           aspectRatio: 'auto',
-                          backgroundColor: '#f3f4f6' // 読み込み中の背景色
+                          backgroundColor: 'transparent',
                         }}
                         onLoadStart={() => {
                           console.log('画像読み込み開始:', photo.title);
@@ -370,7 +381,7 @@ export default function Home() {
                         }}
                       />
                       {/* オーバーレイ */}
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300" />
+                      <div className="absolute inset-0 bg-opacity-90 group-hover:bg-opacity-20 transition-all duration-300" />
                       
                       {/* 削除ボタン（ホバー時に表示） */}
                       <button

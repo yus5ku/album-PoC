@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth, createApiResponse, createErrorResponse } from "@/lib/auth-helpers";
-import * as albumService from "@/lib/services/album.service";
+import * as albumService from "@/lib/services/album_service";
 
 export async function GET() {
   try {

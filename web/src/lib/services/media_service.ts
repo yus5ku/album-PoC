@@ -1,9 +1,9 @@
 import { prisma } from "../db";
-import { putObject, getObjectUrl } from "../storage";
+import { putObject } from "../storage";
 import { analyzeImage } from "../image-analysis";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ApiError } from "./album.service";
+import { ApiError } from "./album_service";
 
 interface UploadInput {
   albumId: string;
@@ -82,18 +82,17 @@ export async function uploadMedia(userId: string, input: UploadInput) {
       width,
       height,
       caption: input.caption ?? null,
-      tags: finalTags.length > 0 ? finalTags : null,
-      // 画像分析結果
+      tags: finalTags.length > 0 ? finalTags : undefined,
       category,
       confidence,
-      colors: colors.length > 0 ? colors : null,
+      colors: colors.length > 0 ? colors : undefined,
       analyzed: analysisResult !== null
     }
   });
 
   return { 
     ...media, 
-    url: getObjectUrl(storageKey),
+    url: `/api/media/file/${media.id}`,
     // 分析結果も返す
     analysis: analysisResult ? {
       category: analysisResult.category,
@@ -107,7 +106,7 @@ export async function getMedia(mediaId: string, userId: string) {
   const m = await prisma.media.findUnique({ where: { id: mediaId }, include: { album: true } });
   if (!m) throw new ApiError(404, "not found");
   if (m.ownerId !== userId && !m.album.isPublic) throw new ApiError(403, "forbidden");
-  return { ...m, url: getObjectUrl(m.storageKey) };
+  return { ...m, url: `/api/media/file/${mediaId}` };
 }
 
 export async function deleteMedia(mediaId: string, userId: string) {
@@ -144,7 +143,7 @@ export async function getMediaByCategory(userId: string, category: string, limit
 
   return media.map((m: any) => ({
     ...m,
-    url: getObjectUrl(m.storageKey)
+    url: `/api/media/file/${m.id}`
   }));
 }
 
